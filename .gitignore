@@ -33,3 +33,6 @@ xml/
 
 # reports
 coverage.out/
+
+# antlr4
+**/.antlr
