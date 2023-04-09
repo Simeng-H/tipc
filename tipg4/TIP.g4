@@ -48,6 +48,7 @@ expr : expr '(' (expr (',' expr)*)? ')' 	#funAppExpr
      | NUMBER					#numExpr
      | KINPUT					#inputExpr
      | KALLOC expr				#allocExpr
+     | KFREE expr				#FreeExpr
      | KNULL					#nullExpr
      | recordExpr				#recordRule
      | '(' expr ')'				#parenExpr
@@ -99,6 +100,7 @@ NUMBER : [0-9]+ ;
 // Placing the keyword definitions first causes ANTLR4 to prioritize
 // their matching relative to IDENTIFIER (which comes later).
 KALLOC  : 'alloc' ;
+KFREE   : 'free' ;
 KINPUT  : 'input' ;
 KWHILE  : 'while' ;
 KIF     : 'if' ;
