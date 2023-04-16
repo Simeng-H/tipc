@@ -11,6 +11,8 @@ target_sources(
           ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTAccessExpr.h
           ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTAllocExpr.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTAllocExpr.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTFreeExpr.cpp
+          ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTFreeExpr.h
           ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTAssignStmt.cpp
           ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTAssignStmt.h
           ${CMAKE_CURRENT_SOURCE_DIR}/treetypes/ASTBinaryExpr.cpp

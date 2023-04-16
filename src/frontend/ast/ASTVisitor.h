@@ -38,6 +38,8 @@ public:
   virtual void endVisit(ASTFunAppExpr * element) {}
   virtual bool visit(ASTAllocExpr * element) { return true; }
   virtual void endVisit(ASTAllocExpr * element) {}
+  virtual bool visit(ASTFreeExpr * element) { return true; }
+  virtual void endVisit(ASTFreeExpr * element) {}
   virtual bool visit(ASTRefExpr * element) { return true; }
   virtual void endVisit(ASTRefExpr * element) {}
   virtual bool visit(ASTDeRefExpr * element) { return true; }

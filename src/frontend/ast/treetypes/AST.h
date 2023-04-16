@@ -10,6 +10,7 @@
 
 #include "ASTAccessExpr.h"
 #include "ASTAllocExpr.h"
+#include "ASTFreeExpr.h"
 #include "ASTAssignStmt.h"
 #include "ASTBinaryExpr.h"
 #include "ASTBlockStmt.h"
