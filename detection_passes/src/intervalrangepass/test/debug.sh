@@ -1,1 +1,0 @@
-opt -enable-new-pm=0 -load /Users/simeng/local_dev/Compilers/tipc-passes/build/src/intervalrangepass/irpass.dylib -mem2reg -irpass -intervalrange-debug >/dev/null </Users/simeng/local_dev/Compilers/tipc-passes/src/intervalrangepass/test/interval$1.tip.bc 2>/Users/simeng/local_dev/Compilers/tipc-passes/src/intervalrangepass/test/interval$1.debug
