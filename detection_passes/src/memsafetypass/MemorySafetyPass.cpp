@@ -1,5 +1,6 @@
 #include "llvm/Pass.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include "llvm/IR/LegacyPassManager.h"
@@ -8,7 +9,21 @@
 #include "MemorySafetyPass.h"
 
 bool MemorySafetyPass::runOnFunction(Function &F) {
-    errs() << "Testing: " << F.getName() << "\n";
+    errs() << "Examining function: " << F.getName() << "\n";
+
+    // identify all heap allocations and their instructions. Heal allocations are calls to calloc.
+    for (auto &B : F) {
+        for (auto &I : B) {
+            if (auto *callInst = dyn_cast<CallInst>(&I)) {
+                if (Function *calledFunction = callInst->getCalledFunction()) {
+                    if (calledFunction->getName() == "calloc") {
+                        errs() << "Found calloc call: " << *callInst << "\n";
+                    }
+                }
+                
+            }
+        }
+    }
     return false; 
 }
 
