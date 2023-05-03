@@ -115,6 +115,7 @@ llvm::Function *inputIntrinsic = nullptr;
 llvm::Function *outputIntrinsic = nullptr;
 llvm::Function *errorIntrinsic = nullptr;
 llvm::Function *callocFun = nullptr;
+llvm::Function *freeFun = nullptr;
 
 
 // A counter to create unique labels
@@ -352,6 +353,16 @@ std::unique_ptr<llvm::Module> ASTProgram::codegen(SemanticAnalysis* analysis,
   callocFun->addFnAttr(llvm::Attribute::NoUnwind);
 
   callocFun->setAttributes(callocFun->getAttributes().addAttributeAtIndex(callocFun->getContext(), 0, llvm::Attribute::NoAlias));
+  
+  // declare the free function
+  // the free function takes in a pointer and returns an int indicating success
+  std::vector<Type *> inputPtr(1, Type::getInt8PtrTy(TheContext));
+  auto *free_FT = FunctionType::get(Type::getInt64Ty(TheContext), inputPtr, false);
+  freeFun = llvm::Function::Create(free_FT, llvm::Function::ExternalLinkage,
+                                     "free", CurrentModule.get());
+  freeFun->addFnAttr(llvm::Attribute::NoUnwind);
+
+  // callocFun->setAttributes(callocFun->getAttributes().addAttributeAtIndex(callocFun->getContext(), 0, llvm::Attribute::NoAlias));
 
   /* We create a single unified record structure that is capable of representing
    * all records in a TIP program.  While wasteful of memory, this approach is 
@@ -615,6 +626,47 @@ llvm::Value* ASTAllocExpr::codegen() {
 
   return Builder.CreatePtrToInt(castPtr, Type::getInt64Ty(TheContext),
                                 "allocIntVal");
+}
+
+/* 'free' Allocate expression
+ * Generates a pointer to the allocs arguments (ints, records, ...)
+ */
+llvm::Value* ASTFreeExpr::codegen() {
+  LOG_S(1) << "Generating code for " << *this;
+
+  // allocFlag = true;
+  // Value *argVal = getInitializer()->codegen();
+  // allocFlag = false;
+  // if (argVal == nullptr) {
+  //   throw InternalError("failed to generate bitcode for the initializer of the alloc expression");
+  // }
+
+  Value *target = getTarget()->codegen();
+  Value *targetPtr = Builder.CreateIntToPtr(target, Type::getInt8PtrTy(TheContext), "targetPtr");
+
+  std::vector<Value *> Arg;
+  Arg.push_back(targetPtr);
+  // Arg.push_back(target);
+  // Builder.CreateCall(freeFun, Arg, "freePtr");
+  Builder.CreateCall(freeFun, Arg);
+  // return Builder.CreateCall(freeFun, Arg, "freePtr");
+
+  return ConstantInt::get(Type::getInt64Ty(TheContext), 1);
+
+
+  
+  //Allocate an int pointer with calloc
+  // std::vector<Value *> twoArg;
+  // twoArg.push_back(ConstantInt::get(Type::getInt64Ty(TheContext), 1));
+  // twoArg.push_back(ConstantInt::get(Type::getInt64Ty(TheContext), 8));
+  // auto *allocInst = Builder.CreateCall(callocFun, twoArg, "allocPtr");
+  // auto *castPtr = Builder.CreatePointerCast(
+  //     allocInst, Type::getInt64PtrTy(TheContext), "castPtr");
+  // // Initialize with argument
+  // auto *initializingStore = Builder.CreateStore(argVal, castPtr);
+
+  // return Builder.CreatePtrToInt(castPtr, Type::getInt64Ty(TheContext),
+  //                               "allocIntVal");
 }
 
 llvm::Value* ASTNullExpr::codegen() {
