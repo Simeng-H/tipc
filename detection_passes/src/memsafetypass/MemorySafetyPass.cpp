@@ -161,15 +161,22 @@ std::map<Value *, std::set<Value *>> PointsToSolver::solve(){
         Cell *x, *y, *z;
         Instruction *inst;
 
+        // debug print
+        errs() << "Processing constraint:" << "\n" << "\t" << *constraint << "\n";
+
         switch (constraint->type){
             case PointsToConstraint::Type::ALLOC:
-                inst = dyn_cast<Instruction>(src);
-                addToken(inst, dest);
-                propogate();
+                // inst = dyn_cast<Instruction>(src);
+                // addToken(inst, dest);
+                // propogate();
                 break;
             case PointsToConstraint::Type::STORE:
                 x = dest;
                 y = src;
+
+                addToken(y, x);
+                propogate();
+
                 for (auto &c : cells){
                     if(sol[x].find(c) != sol[x].end()){
                         addEdge(y, c);
@@ -198,6 +205,12 @@ std::map<Value *, std::set<Value *>> PointsToSolver::solve(){
                 break;
             case PointsToConstraint::Type::ASSIGN:
                 addEdge(src, dest);
+
+                // debug print
+                errs() << "Adding equivalence: " << *src << " = " << *dest << "\n";
+
+                equivalentCells[src].insert(dest);
+                equivalentCells[dest].insert(src);
                 propogate();
                 break;
         }
@@ -229,11 +242,18 @@ void PointsToSolver::addToken(Token *t, Cell *x){
         errs() << "Adding token: " << *t << " to cell: [" << *x << "]\n";
         // add the token to the worklist
         worklist.push_back(std::make_pair(t, x));
+
+        // add equivalent cells as well
+        for (auto &equiv : equivalentCells[t]){
+            addToken(equiv, x);
+        }
     }
 }
 
 void PointsToSolver::addEdge(Cell *x, Cell *y){
 
+    // debug print
+    errs() << "Trying to add edge: [" << *x << "] -> [" << *y << "]\n";
     // check if x and y are the same
     if (x == y){
         return;
@@ -241,15 +261,22 @@ void PointsToSolver::addEdge(Cell *x, Cell *y){
     auto &x_succ = succ[x];
 
     // check if y is already in x's succ
-    if (x_succ.find(y) != x_succ.end()){
-        return;
+    if (!(x_succ.empty())){
+        if (x_succ.find(y) != x_succ.end()){
+            errs() << "Edge already exists: [" << *x << "] -> [" << *y << "]\n";
+            errs() << "Succs of [" << *x << "]:\n";
+            for (auto &s : x_succ){
+                errs() << "\t[" << *s << "]\n";
+            }
+            return;
+        }
     }
 
     // add y to x's succ
     x_succ.insert(y);
 
     // debug print
-    errs() << "Adding edge: [" << *x << "] -> [" << *y << "]\n";
+    errs() << "Added edge: [" << *x << "] -> [" << *y << "]\n";
     
     for (auto &t : sol[x]){
         addToken(t, y);
@@ -257,6 +284,10 @@ void PointsToSolver::addEdge(Cell *x, Cell *y){
 }
 
 void PointsToSolver::propogate(){
+
+    // debug print
+    errs() << "Propogating...\n";
+
     while (!worklist.empty()){
         auto curr = worklist.front();
         auto &t = curr.first;

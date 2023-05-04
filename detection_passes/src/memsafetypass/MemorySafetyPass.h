@@ -62,6 +62,7 @@ private:
     std::set<Value *> variables;
     std::vector<Instruction *> allocSites;
     std::set<Cell*> cells;
+    std::map<Cell*, std::set<Cell*>> equivalentCells;
 
 public:
     // Update the type of allocSites in the constructor as well
@@ -72,6 +73,22 @@ public:
         for (auto *variable : variables) {
             cells.insert(variable);
         }
+
+        // initialize equivalentCells
+        for (auto *cell : cells) {
+            equivalentCells[cell] = std::set<Cell*>();
+            equivalentCells[cell].insert(cell);
+        }
+
+        // // update allocSites to be a deep copy of itself
+        // auto copiedAllocSites = std::vector<Instruction *>();
+        // for (auto *allocSite : allocSites) {
+
+        //     // create deep copy of allocSite
+        //     auto *copiedAllocSite = allocSite->clone();
+            
+        // }
+
     }
 
     std::map<Cell *, std::set<Token *>> solve();
