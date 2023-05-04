@@ -226,7 +226,7 @@ void PointsToSolver::addToken(Token *t, Cell *x){
     if (curr_sol.find(t) == curr_sol.end()){
         curr_sol.insert(t);
 
-        errs() << "Adding token: " << *t << " to cell: []" << *x << "]\n";
+        errs() << "Adding token: " << *t << " to cell: [" << *x << "]\n";
         // add the token to the worklist
         worklist.push_back(std::make_pair(t, x));
     }
