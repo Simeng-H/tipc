@@ -277,14 +277,14 @@ Any ASTBuilder::visitAllocExpr(TIPParser::AllocExprContext *ctx) {
   return "";
 } // LCOV_EXCL_LINE
 
-Any ASTBuilder::visitFreeExpr(TIPParser::FreeExprContext *ctx) {
+Any ASTBuilder::visitFreeStmt(TIPParser::FreeStmtContext *ctx) {
   visit(ctx->expr());
-  visitedExpr = std::make_unique<ASTFreeExpr>(std::move(visitedExpr));
+  visitedStmt = std::make_unique<ASTFreeStmt>(std::move(visitedExpr));
 
   LOG_S(1) << "Built AST node " << *visitedExpr;
 
   // Set source location 
-  visitedExpr->setLocation(ctx->getStart()->getLine(), 
+  visitedStmt->setLocation(ctx->getStart()->getLine(),
                            ctx->getStart()->getCharPositionInLine());
   return "";
 } // LCOV_EXCL_LINE

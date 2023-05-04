@@ -52,7 +52,7 @@ public:
   Any visitInputExpr(TIPParser::InputExprContext *ctx) override;
   Any visitFunAppExpr(TIPParser::FunAppExprContext *ctx) override;
   Any visitAllocExpr(TIPParser::AllocExprContext *ctx) override;
-  Any visitFreeExpr(TIPParser::FreeExprContext *ctx) override;
+//  Any visitFreeExpr(TIPParser::FreeExprContext *ctx) override;
   Any visitRefExpr(TIPParser::RefExprContext *ctx) override;
   Any visitDeRefExpr(TIPParser::DeRefExprContext *ctx) override;
   Any visitNullExpr(TIPParser::NullExprContext *ctx) override;
@@ -68,4 +68,5 @@ public:
   Any visitOutputStmt(TIPParser::OutputStmtContext *ctx) override;
   Any visitErrorStmt(TIPParser::ErrorStmtContext *ctx) override;
   Any visitReturnStmt(TIPParser::ReturnStmtContext *ctx) override;
+  Any visitFreeStmt(TIPParser::FreeStmtContext *ctx) override;
 };

@@ -48,7 +48,6 @@ expr : expr '(' (expr (',' expr)*)? ')' 	#funAppExpr
      | NUMBER					#numExpr
      | KINPUT					#inputExpr
      | KALLOC expr				#allocExpr
-     | KFREE expr				#FreeExpr
      | KNULL					#nullExpr
      | recordExpr				#recordRule
      | '(' expr ')'				#parenExpr
@@ -66,6 +65,7 @@ statement : blockStmt
     | ifStmt
     | outputStmt
     | errorStmt
+    | freeStmt
 ;
 
 assignStmt : expr '=' expr ';' ;
@@ -81,6 +81,8 @@ outputStmt : KOUTPUT expr ';'  ;
 errorStmt : KERROR expr ';'  ;
 
 returnStmt : KRETURN expr ';'  ;
+
+freeStmt: KFREE expr ';' ;
 
 
 ////////////////////// TIP Lexicon ////////////////////////// 

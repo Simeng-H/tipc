@@ -355,9 +355,10 @@ std::unique_ptr<llvm::Module> ASTProgram::codegen(SemanticAnalysis* analysis,
   callocFun->setAttributes(callocFun->getAttributes().addAttributeAtIndex(callocFun->getContext(), 0, llvm::Attribute::NoAlias));
   
   // declare the free function
-  // the free function takes in a pointer and returns an int indicating success
+  // the free function takes in a pointer and returns void
+
   std::vector<Type *> inputPtr(1, Type::getInt8PtrTy(TheContext));
-  auto *free_FT = FunctionType::get(Type::getInt64Ty(TheContext), inputPtr, false);
+  auto *free_FT = FunctionType::get(Type::getVoidTy(TheContext), inputPtr, false);
   freeFun = llvm::Function::Create(free_FT, llvm::Function::ExternalLinkage,
                                      "free", CurrentModule.get());
   freeFun->addFnAttr(llvm::Attribute::NoUnwind);
@@ -631,7 +632,7 @@ llvm::Value* ASTAllocExpr::codegen() {
 /* 'free' Allocate expression
  * Generates a pointer to the allocs arguments (ints, records, ...)
  */
-llvm::Value* ASTFreeExpr::codegen() {
+llvm::Value* ASTFreeStmt::codegen() {
   LOG_S(1) << "Generating code for " << *this;
 
   // allocFlag = true;
@@ -641,7 +642,7 @@ llvm::Value* ASTFreeExpr::codegen() {
   //   throw InternalError("failed to generate bitcode for the initializer of the alloc expression");
   // }
 
-  Value *target = getTarget()->codegen();
+  Value *target = getArg()->codegen();
   Value *targetPtr = Builder.CreateIntToPtr(target, Type::getInt8PtrTy(TheContext), "targetPtr");
 
   std::vector<Value *> Arg;
