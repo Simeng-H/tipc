@@ -15,11 +15,6 @@ CellStateAnalysis::CsaResult CellStateAnalysis::runCellStateAnalysis(Function &F
     // debug print
     errs() << "\nRunning cell state analysis...\n";
 
-    // auto &variables = pointsToResult.variables;
-    // auto &pointsToCells = pointsToResult.pointsToCells;
-    // auto &equivalentCells = pointsToResult.equivalentCells;
-
-
     // construct simplified CFG that only contains relevant instructions
     std::map<Instruction *, std::set<Instruction *>> simplifiedCFG = getSimplifiedSuccCFG(F);
 
@@ -119,61 +114,71 @@ CellStateAnalysis::CsaResult CellStateAnalysis::runCellStateAnalysis(Function &F
         //     errs() << "\t\t[" << *I << "]\n";
         // }
 
-        // get predecessor states
-        auto predStates = std::vector<MapState>();
-        for (auto &pred : predInsts){
-            predStates.push_back(state[pred]);
-        }
+        // if no pred instruction, use default MapState
+        MapState updatedMapState;
+        if (predInsts.empty()){
+            updatedMapState = defaultMapState;
+        }else{
+            auto predStates = std::vector<MapState>();
+            for (auto &predInst : predInsts){
+                auto predStateBefExec = state[predInst];
+                auto predStateAftExec = predStateBefExec;
 
-        // use all bottom if no predecessor
-        if (predStates.empty()){
-            predStates.push_back(defaultMapState);
-        }
+                // update based on current instruction，alloca/calloc/free changes the state of the cell
+                if (auto allocaInst = dyn_cast<AllocaInst>(predInst))
+                {
+                    // debug print
+                    errs() << "\tFound alloca instruction: [" << *allocaInst << "]\n";
 
-        // merge the predecessor states
-        auto iterPredStates = predStates.begin();
-        auto endPredStates = predStates.end();
-        auto mergedPredState = *iterPredStates;
-        ++iterPredStates;
-        for (;iterPredStates != endPredStates; ++iterPredStates){
-            mergedPredState = mergeMapStates(mergedPredState, *iterPredStates);
-        }
-
-        auto updatedMapState = mergedPredState;
-
-        // update based on current instruction，alloca/calloc/free changes the state of the cell
-        if (auto allocaInst = dyn_cast<AllocaInst>(curr)){
-            // debug print
-            errs() << "\tFound alloca instruction: [" << *allocaInst << "]\n";
-
-            updatedMapState[allocaInst] = STACK_ALLOCATED;
-        }
-        else if (auto callInst = dyn_cast<CallInst>(curr)){
-            if (callInst->getCalledFunction()->getName() == "calloc"){
-                // debug print
-                errs() << "\tFound calloc instruction: [" << *callInst << "]\n";
-                updatedMapState[callInst] = HEAP_ALLOCATED;
-            }else if (callInst->getCalledFunction()->getName() == "free"){
-
-                // debug print
-                errs() << "\tFound free instruction: [" << *callInst << "]\n";
-
-                auto target = callInst->getArgOperand(0);
-                auto targetPointsToCells = pointsToCells[target];
-
-                for (auto &targetPointsToCell : targetPointsToCells){
-                    for (auto &equivalentCell : equivalentCells[targetPointsToCell]){
+                    predStateAftExec[allocaInst] = STACK_ALLOCATED;
+                } 
+                else if (auto callInst = dyn_cast<CallInst>(predInst))
+                {
+                    if (callInst->getCalledFunction()->getName() == "calloc")
+                    {
+                        // debug print
+                        errs() << "\tFound calloc instruction: [" << *callInst << "]\n";
+                        predStateAftExec[callInst] = HEAP_ALLOCATED;
+                    }
+                    else if (callInst->getCalledFunction()->getName() == "free")
+                    {
 
                         // debug print
-                        errs() << "\t\tFound equivalent cell: [" << *equivalentCell << "]\n";
+                        errs() << "\tFound free instruction: [" << *callInst << "]\n";
 
-                        if (updatedMapState.count(equivalentCell) > 0){
-                            updatedMapState[equivalentCell] = HEAP_FREED;
+                        auto target = callInst->getArgOperand(0);
+                        auto targetPointsToCells = pointsToCells[target];
+
+                        for (auto &targetPointsToCell : targetPointsToCells)
+                        {
+                            for (auto &equivalentCell : equivalentCells[targetPointsToCell])
+                            {
+
+                                // debug print
+                                errs() << "\t\tFound equivalent cell: [" << *equivalentCell << "]\n";
+
+                                if (predStateBefExec.count(equivalentCell) > 0)
+                                {
+                                    predStateAftExec[equivalentCell] = HEAP_FREED;
+                                }
+                            }
                         }
                     }
                 }
 
+                predStates.push_back(predStateAftExec);
             }
+
+            // merge the predecessor states
+            auto iterPredStates = predStates.begin();
+            auto endPredStates = predStates.end();
+            auto mergedPredState = *iterPredStates;
+            ++iterPredStates;
+            for (; iterPredStates != endPredStates; ++iterPredStates)
+            {
+                mergedPredState = mergeMapStates(mergedPredState, *iterPredStates);
+            }
+            updatedMapState = mergedPredState;
         }
 
         // check if MapState has changed since last time
