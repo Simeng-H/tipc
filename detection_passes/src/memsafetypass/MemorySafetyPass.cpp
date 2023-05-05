@@ -15,24 +15,11 @@
 #include <utility>
 
 bool MemorySafetyPass::runOnFunction(Function &F) {
+    errs() << "Running memory safety pass on function: " << F.getName() << "\n";
 
-    runPointsToAnalysis(F);
+    // Run points to analysis
+    PointsToResult pointsToResult = runPointsToAnalysis(F);
 
-    // errs() << "Examining function: " << F.getName() << "\n";
-
-    // // identify all heap allocations and their instructions. Heal allocations are calls to calloc.
-    // for (auto &B : F) {
-    //     for (auto &I : B) {
-    //         if (auto *callInst = dyn_cast<CallInst>(&I)) {
-    //             if (Function *calledFunction = callInst->getCalledFunction()) {
-    //                 if (calledFunction->getName() == "calloc") {
-    //                     errs() << "Found calloc call: " << *callInst << "\n";
-    //                 }
-    //             }
-                
-    //         }
-    //     }
-    // }
     return false; 
 }
 
@@ -41,7 +28,7 @@ char MemorySafetyPass::ID = 0;
 static RegisterPass<MemorySafetyPass> X("mspass", "Prints out each potentially unsafe memory access");
 
 
-void MemorySafetyPass::runPointsToAnalysis(Function &F) {
+PointsToResult MemorySafetyPass::runPointsToAnalysis(Function &F) {
     errs() << "Running points to analysis on function: " << F.getName() << "\n";
 
     auto allocSites = std::vector<Instruction *>();
@@ -147,10 +134,12 @@ void MemorySafetyPass::runPointsToAnalysis(Function &F) {
 
     // Run the actual cubic solver
     PointsToSolver solver = PointsToSolver(constraints, variables, allocSites);
-    std::map<Value *, std::set<Value *>> pointsToMap = solver.solve();
+    PointsToResult result = solver.solve();
+
+    return result;
 }
 
-std::map<Value *, std::set<Value *>> PointsToSolver::solve(){
+PointsToResult PointsToSolver::solve(){
 
     // debug print
     errs() << "Solving points to constraints:\n";
@@ -209,7 +198,7 @@ std::map<Value *, std::set<Value *>> PointsToSolver::solve(){
                 // debug print
                 errs() << "Adding equivalence: " << *src << " = " << *dest << "\n";
 
-                equivalentCells[src].insert(dest);
+                // equivalentCells[src].insert(dest);
                 equivalentCells[dest].insert(src);
                 propogate();
                 break;
@@ -218,18 +207,36 @@ std::map<Value *, std::set<Value *>> PointsToSolver::solve(){
 
 
     // debug print
-    errs() << "\nPoints to solution:\n";
+    errs() << "\nPoints to solution:\n\n";
 
-    std::map<Value *, std::set<Value *>> pointsToSolution;
-    for(auto &var : variables){
-        pointsToSolution[var] = sol[var];
-        errs() << "Variable: " << *var << " points to \n";
+    PointsToResult result;
+    result.variables = cells;
+    result.pointsToCells = sol;
+    result.equivalentCells = equivalentCells;
+
+    printResults(result);
+
+    return result;
+
+}
+
+void PointsToSolver::printResults(PointsToResult &result){
+
+    auto &variables = result.variables;
+    auto &sol = result.pointsToCells;
+    auto &equiv = result.equivalentCells;
+
+    for(auto &var: variables){
+        errs() << "Variable: " << *var;
+        errs() << "\n\tPoints to set:\n";
         for (auto &cell : sol[var]){
-            errs() << "\t" << *cell << "\n";
+            errs() << "\t\t" << *cell << "\n";
         }
-
+        errs() << "\n\tEquivalent cells:\n";
+        for (auto &equiv : equiv[var]){
+            errs() << "\t\t" << *equiv << "\n";
+        }
     }
-    return pointsToSolution;
 
 }
 

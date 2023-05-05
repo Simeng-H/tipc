@@ -1,5 +1,11 @@
 #pragma once
 
+#include "llvm/Pass.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Value.h"
+#include "llvm/Support/raw_ostream.h"
+
 #include <deque>
 #include <vector>
 #include <set>
@@ -8,15 +14,24 @@
 
 using namespace llvm;
 
+typedef struct PointsToResult
+{
+    std::set<Value *> variables;
+    std::map<Value *, std::set<Value *>> pointsToCells;
+    std::map<Value *, std::set<Value *>> equivalentCells;
+} PointsToResult;
+
+
 namespace {
     struct MemorySafetyPass : public FunctionPass {
         public:
             static char ID;
             MemorySafetyPass() : FunctionPass(ID) {}
             virtual bool runOnFunction(Function &F) override;
-            void runPointsToAnalysis(Function &F);
+            PointsToResult runPointsToAnalysis(Function &F);
     };
 }
+
 
 
 class PointsToConstraint {
@@ -79,20 +94,10 @@ public:
             equivalentCells[cell] = std::set<Cell*>();
             equivalentCells[cell].insert(cell);
         }
-
-        // // update allocSites to be a deep copy of itself
-        // auto copiedAllocSites = std::vector<Instruction *>();
-        // for (auto *allocSite : allocSites) {
-
-        //     // create deep copy of allocSite
-        //     auto *copiedAllocSite = allocSite->clone();
-            
-        // }
-
     }
 
-    std::map<Cell *, std::set<Token *>> solve();
-    void printResults();
+    PointsToResult solve();
+    static void printResults(PointsToResult &result);
 
 private:
     std::map<Cell *, std::set<Token *>> sol;
