@@ -26,10 +26,23 @@ namespace
     struct MemorySafetyPass : public FunctionPass
     {
     public:
+        enum MsViolationType{
+            DOUBLE_FREE,
+            USE_AFTER_FREE,
+            STACK_FREE,
+        };
+
+        typedef struct MsViolation{
+            MsViolationType type;
+            Instruction *inst;
+            MsViolation(MsViolationType type, Instruction *inst) : type(type), inst(inst) {}
+        } MsViolation;
+
         static char ID;
         MemorySafetyPass() : FunctionPass(ID) {}
         virtual bool runOnFunction(Function &F) override;
         PointsToResult runPointsToAnalysis(Function &F);
+
     };
 }
 
