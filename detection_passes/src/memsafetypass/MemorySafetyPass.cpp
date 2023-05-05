@@ -22,7 +22,8 @@ bool MemorySafetyPass::runOnFunction(Function &F) {
 
     // Run Cell State Analysis
     CellStateAnalysis cellStateAnalysis = CellStateAnalysis(pointsToResult);
-    cellStateAnalysis.runCellStateAnalysis(F);
+    CellStateAnalysis::CsaResult csaResult = cellStateAnalysis.runCellStateAnalysis(F);
+    
 
 
     return false; 
