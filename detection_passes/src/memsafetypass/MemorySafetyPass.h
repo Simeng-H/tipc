@@ -130,7 +130,7 @@ private:
 
 class CellStateAnalysis
 {
-private:
+public:
     enum CellState
     {
         TOP,
@@ -139,9 +139,15 @@ private:
         STACK_ALLOCATED,
         HEAP_FREED,
     };
-
     typedef std::map<Value *, CellState> MapState;
-    typedef std::map<Instruction *, MapState> Result;
+    typedef std::map<Instruction *, MapState> AnalysisState;
+    typedef struct CsaResult
+    {
+        std::set<Instruction *> analyzedInstructions;
+        std::set<Value *> eligibleCells;
+        AnalysisState inst2CellStates;
+    } CsaResult;
+private:
 
     PointsToResult pointsToResult;
     std::set<Value *> eligibleCells;
@@ -196,6 +202,7 @@ private:
     CellState lub(CellState &state1, CellState &state2);
 
 public:
+
     CellStateAnalysis(PointsToResult pointsToResult) : pointsToResult(pointsToResult)
     {
         auto &variables = pointsToResult.variables;
@@ -231,6 +238,6 @@ public:
             errs() << "\t[" << *cell << "]\n";
         }
     }
-    Result runCellStateAnalysis(Function &F);
-    static void printResults(Result &result);
+    CsaResult runCellStateAnalysis(Function &F);
+    static void printResults(CsaResult &result);
 };

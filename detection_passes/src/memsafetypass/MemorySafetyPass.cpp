@@ -342,7 +342,7 @@ void PointsToSolver::propogate(){
 
 // };
 
-CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
+CellStateAnalysis::CsaResult CellStateAnalysis::runCellStateAnalysis(Function &F){
 
     // debug print
     errs() << "\nRunning cell state analysis...\n";
@@ -366,6 +366,9 @@ CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
         }
     }
 
+    // debug print
+    errs() << "Collecting all instructions...\n";
+
     // collect all instructions
     std::set<Instruction *> allInstructions;
     for (auto &B : F){
@@ -374,12 +377,16 @@ CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
         }
     }
 
+
+
     // initialize the worklist to contain all instructions
     std::deque<Instruction *> worklist(allInstructions.begin(), allInstructions.end());
 
-    // initialize the result
-    auto state = Result();
+    // debug print
+    errs() << "Initializing the state lattice...\n";
 
+    // initialize the result
+    auto state = AnalysisState();
     // for each instruction, initialize the state to default MapState
 
     // default MapState: all eligible cells are BOTTOM
@@ -393,14 +400,42 @@ CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
         state[I] = defaultMapState;
     }
 
+    // debug print
+    errs() << "Running the worklist algorithm to analyze cell state...\n";
 
     // run until the worklist is empty
     while(!worklist.empty()){
-        auto &curr = worklist.front();
+        auto curr = worklist.front();
         worklist.pop_front();
+
+        // debug print
+        errs() << "Analyzing instruction: [" << *curr << "]\n";
 
         // lookup the instruction in the result
         auto &old = state[curr];
+
+        // // debug print
+        // errs() << "\t Old state:\n";
+        // for (auto &cell : eligibleCells){
+        //     errs() << "\t\t[" << *cell << "]: ";
+        //     switch (old[cell]){
+        //         case TOP:
+        //             errs() << "TOP\n";
+        //             break;
+        //         case BOTTOM:
+        //             errs() << "BOTTOM\n";
+        //             break;
+        //         case HEAP_ALLOCATED:
+        //             errs() << "HEAP_ALLOCATED\n";
+        //             break;
+        //         case STACK_ALLOCATED:
+        //             errs() << "STACK_ALLOCATED\n";
+        //             break;
+        //         case HEAP_FREED:
+        //             errs() << "HEAP_FREED\n";
+        //             break;
+        //     }
+        // }
 
         // get predecessor instructions
         auto predInsts = std::vector<Instruction *>();
@@ -410,10 +445,21 @@ CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
             }
         }
 
+        // // debug print
+        // errs() << "\t Predecessor instructions:\n";
+        // for (auto &I : predInsts){
+        //     errs() << "\t\t[" << *I << "]\n";
+        // }
+
         // get predecessor states
         auto predStates = std::vector<MapState>();
         for (auto &pred : predInsts){
             predStates.push_back(state[pred]);
+        }
+
+        // use all bottom if no predecessor
+        if (predStates.empty()){
+            predStates.push_back(defaultMapState);
         }
 
         // merge the predecessor states
@@ -425,20 +471,92 @@ CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
             mergedPredState = mergeMapStates(mergedPredState, *iterPredStates);
         }
 
-        // TODO: update based on current instruction
+        auto updatedMapState = mergedPredState;
 
-        
+        // update based on current instruction，alloca/calloc/free changes the state of the cell
+        if (auto allocaInst = dyn_cast<AllocaInst>(curr)){
+            updatedMapState[allocaInst] = STACK_ALLOCATED;
+        }
+        else if (auto callocInst = dyn_cast<CallInst>(curr)){
+            if (callocInst->getCalledFunction()->getName() == "calloc"){
+                updatedMapState[callocInst] = HEAP_ALLOCATED;
+            }
+        }
+        else if (auto freeInst = dyn_cast<CallInst>(curr)){
+            if (freeInst->getCalledFunction()->getName() == "free"){
+                updatedMapState[freeInst] = HEAP_FREED;
+            }
+        }
 
+        // check if MapState has changed since last time
+        auto changed = false;
+        for (auto &cell : eligibleCells){
+            if (updatedMapState[cell] != old[cell]){
+                changed = true;
+                break;
+            }
+        }
 
-        
-
-        
+        // if MapState has changed, update the result and add all successors to the worklist
+        if (changed){
+            state[curr] = updatedMapState;
+            for (auto &succ : simplifiedCFG[curr]){
+                worklist.push_back(succ);
+            }
+        }
     }
 
-    return Result();
+    // debug print
+    errs() << "Cell state analysis finished.\n";
 
+    auto ret = CsaResult();
+    ret.eligibleCells = eligibleCells;
+    ret.inst2CellStates = state;
+    ret.analyzedInstructions = allInstructions;
+
+    // print the result
+    printResults(ret);
+
+    return ret;
 
 }
+
+void CellStateAnalysis::printResults(CsaResult &result) {
+    // debug print
+    errs() << "Printing Cell State Analysis results...\n";
+
+    auto &eligibleCells = result.eligibleCells;
+    auto &inst2CellStates = result.inst2CellStates;
+    auto &analyzedInstructions = result.analyzedInstructions;
+
+    // print the result
+    for (auto &I : analyzedInstructions){
+        errs() << "Instruction: [" << *I << "]\n";
+        errs() << "\t Cell states:\n";
+        for (auto &cell : eligibleCells){
+            errs() << "\t\t[" << *cell << "]: ";
+            switch (inst2CellStates[I][cell]){
+                case TOP:
+                    errs() << "TOP\n";
+                    break;
+                case BOTTOM:
+                    errs() << "BOTTOM\n";
+                    break;
+                case HEAP_ALLOCATED:
+                    errs() << "HEAP_ALLOCATED\n";
+                    break;
+                case STACK_ALLOCATED:
+                    errs() << "STACK_ALLOCATED\n";
+                    break;
+                case HEAP_FREED:
+                    errs() << "HEAP_FREED\n";
+                    break;
+            }
+        }
+    }
+
+}
+
 
 std::map<Instruction *, std::set<Instruction *>> CellStateAnalysis::getSimplifiedSuccCFG(Function &F) {
     std::set<Instruction *> allInstructions;
