@@ -15,6 +15,7 @@
 #include <set>
 #include <map>
 #include <utility>
+#include <stack>
 
 bool MemorySafetyPass::runOnFunction(Function &F) {
     errs() << "Running memory safety pass on function: " << F.getName() << "\n";
@@ -26,6 +27,13 @@ bool MemorySafetyPass::runOnFunction(Function &F) {
     CellStateAnalysis cellStateAnalysis = CellStateAnalysis(pointsToResult);
     CellStateAnalysis::CsaResult csaResult = cellStateAnalysis.runCellStateAnalysis(F);
 
+    // Run legality check
+    MsaResult violations = checkLegality(F, pointsToResult, csaResult);
+
+    // Print results
+    printResults(violations);
+    
+    
 
 
     return false; 
@@ -147,5 +155,138 @@ PointsToSolver::PointsToResult MemorySafetyPass::runPointsToAnalysis(Function &F
     return result;
 }
 
+std::vector<MemorySafetyPass::MsViolation> MemorySafetyPass::checkLegality(
+        Function &F, 
+        PointsToSolver::PointsToResult &pointsToResult, 
+        CellStateAnalysis::CsaResult &csaResult
+    )
+{
+    auto &allInsts = csaResult.analyzedInstructions;
+    auto &allCells = csaResult.eligibleCells;
+    auto &inst2CellStates = csaResult.inst2CellStates;
+    auto &pointsToSets = pointsToResult.pointsToCells;
+    auto &equivalentCells = pointsToResult.equivalentCells;
+
+    // initialize result vector
+    auto result = std::vector<MsViolation>();
+
+    // Iterate over all instructions and check if they are load/store/free
+    for (auto &inst : allInsts) {
+        
+        errs() << "Checking instruction: " << *inst << "\n";
+
+        auto referencedMemoryCells = std::vector<Value *>();
+        auto &cellStates = inst2CellStates[inst];
+
+        if (auto *loadInst = dyn_cast<LoadInst>(inst)) {
+            Value *src = loadInst->getPointerOperand();
+            referencedMemoryCells.push_back(src);
+        } else if (auto *storeInst = dyn_cast<StoreInst>(inst)) {
+            Value *dest = storeInst->getPointerOperand();
+            referencedMemoryCells.push_back(dest);
+        } else if (auto *freeInst = dyn_cast<CallInst>(inst)) {
+            if (Function *calledFunction = freeInst->getCalledFunction()) {
+                if (calledFunction->getName() == "free") {
+                    Value *src = freeInst->getArgOperand(0);
+                    referencedMemoryCells.push_back(src);
+                }
+            }
+        }
+
+        // add all direct and transitive equivalent cells to the referenced cells via DFS
+        for (auto *cell : referencedMemoryCells) {
+            std::stack<Value *> dfsStack;
+            dfsStack.push(cell);
+            while (!dfsStack.empty()) {
+                Value *currentCell = dfsStack.top();
+                dfsStack.pop();
+                if (equivalentCells.find(currentCell) != equivalentCells.end()) {
+                    for (auto *equivalentCell : equivalentCells[currentCell]) {
+                        if (std::find(referencedMemoryCells.begin(), referencedMemoryCells.end(), equivalentCell) == referencedMemoryCells.end()) {
+                            dfsStack.push(equivalentCell);
+                        }
+                    }
+                }
+                if (std::find(referencedMemoryCells.begin(), referencedMemoryCells.end(), currentCell) == referencedMemoryCells.end()) {
+                    referencedMemoryCells.push_back(currentCell);
+                }
+            }
+        }
+
+        // debug print
+        errs() << "\t Referenced cells: \n";
+        for (auto *cell : referencedMemoryCells) {
+            errs() << "\t\t" << *cell << "\n";
+        }
+
+        // check if all referenced cells are safe
+        if (auto *loadInst = dyn_cast<LoadInst>(inst)){
+            for (auto *cell : referencedMemoryCells) {
+                if(cellStates.count(cell) == 0) {
+                    continue;
+                }
+                auto &cellState = cellStates[cell];
+                if (cellState == CellStateAnalysis::CellState::HEAP_FREED) {
+                    auto violation = MsViolation(MsViolationType::USE_AFTER_FREE, inst);
+                    result.push_back(violation);
+                }
+            }
+        } else if (auto *storeInst = dyn_cast<StoreInst>(inst)) {
+            for (auto *cell : referencedMemoryCells) {
+                if(cellStates.count(cell) == 0) {
+                    continue;
+                }
+                auto &cellState = cellStates[cell];
+                if (cellState == CellStateAnalysis::CellState::HEAP_FREED) {
+                    auto violation = MsViolation(MsViolationType::USE_AFTER_FREE, inst);
+                    result.push_back(violation);
+                }
+            }
+        } else if (auto *freeInst = dyn_cast<CallInst>(inst)) {
+            if (Function *calledFunction = freeInst->getCalledFunction()) {
+                if (calledFunction->getName() == "free") {
+                    for (auto *cell : referencedMemoryCells) {
+                        if(cellStates.count(cell) == 0) {
+                            continue;
+                        }
+                        auto &cellState = cellStates[cell];
+                        if (cellState == CellStateAnalysis::CellState::HEAP_FREED) {
+                            auto violation = MsViolation(MsViolationType::DOUBLE_FREE, inst);
+                            result.push_back(violation);
+                        } else if (cellState == CellStateAnalysis::CellState::HEAP_ALLOCATED) {
+                            auto violation = MsViolation(MsViolationType::STACK_FREE, inst);
+                            result.push_back(violation);
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
+    return result;
+}
+
+void MemorySafetyPass::printResults(MsaResult &msaResult){
+    errs() << "Memory Safety Analysis Results:\n";
+    for(auto resultItem : msaResult){
+        auto type = resultItem.type;
+        auto inst = resultItem.inst;
+        auto typeString = "";
+        switch(type){
+            case MsViolationType::USE_AFTER_FREE:
+                typeString = "Use after free";
+                break;
+            case MsViolationType::DOUBLE_FREE:
+                typeString = "Double free";
+                break;
+            case MsViolationType::STACK_FREE:
+                typeString = "Freeing non-heap memory";
+                break;
+        }
+
+        errs() << "\t" << typeString << " in " << *inst << "\n";
+    }
 
 
+}

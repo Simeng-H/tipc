@@ -32,15 +32,18 @@ public:
         MsViolation(MsViolationType type, Instruction *inst) : type(type), inst(inst) {}
     } MsViolation;
 
+    typedef std::vector<MsViolation> MsaResult;
+
     static char ID;
     MemorySafetyPass() : FunctionPass(ID) {}
     virtual bool runOnFunction(Function &F) override;
     PointsToSolver::PointsToResult runPointsToAnalysis(Function &F);
-    std::vector<MsViolation> check_legality(
+    std::vector<MsViolation> checkLegality(
         Function &F, 
         PointsToSolver::PointsToResult &pointsToResult, 
         CellStateAnalysis::CsaResult &csaResult
     );
+    static void printResults(MsaResult &msaResult);
 };
 
 

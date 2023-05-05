@@ -33,51 +33,35 @@ private:
     std::set<Value *> eligibleCells;
 
     std::map<Instruction *, std::set<Instruction *>> getSimplifiedSuccCFG(Function &F);
-    bool isEligibleInstruction(Instruction *I)
-    {
+    // bool isEligibleInstruction(Instruction *I)
+    // {
 
-        // stack allocation
-        if (isa<AllocaInst>(I))
-        {
-            return true;
-        }
-        // heap allocation
-        if (isa<CallInst>(I))
-        {
-            if (I->getOperand(0)->getName() == "calloc")
-            {
-                return true;
-            }
-        }
+    //     // stack allocation
+    //     if (isa<AllocaInst>(I))
+    //     {
+    //         return true;
+    //     }
+    //     // heap allocation
+    //     if (isa<CallInst>(I))
+    //     {
+    //         if (I->getOperand(0)->getName() == "calloc")
+    //         {
+    //             return true;
+    //         }
+    //     }
 
-        // load and store
-        if (isa<LoadInst>(I))
-        {
-            return true;
-        }
-        if (isa<StoreInst>(I))
-        {
-            return true;
-        }
+    //     // load and store
+    //     if (isa<LoadInst>(I))
+    //     {
+    //         return true;
+    //     }
+    //     if (isa<StoreInst>(I))
+    //     {
+    //         return true;
+    //     }
 
-        // ptr casts
-        if (isa<BitCastInst>(I))
-        {
-            return true;
-        }
-
-        // int-ptr casts
-        if (isa<IntToPtrInst>(I))
-        {
-            return true;
-        }
-        if (isa<PtrToIntInst>(I))
-        {
-            return true;
-        }
-
-        return false;
-    }
+    //     return false;
+    // }
     MapState mergeMapStates(MapState &state1, MapState &state2);
     CellState lub(CellState &state1, CellState &state2);
 
