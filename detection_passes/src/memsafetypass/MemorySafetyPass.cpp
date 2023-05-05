@@ -172,25 +172,32 @@ std::vector<MemorySafetyPass::MsViolation> MemorySafetyPass::checkLegality(
 
     // Iterate over all instructions and check if they are load/store/free
     for (auto &inst : allInsts) {
+        auto &cellStates = inst2CellStates[inst];
         
         errs() << "Checking instruction: " << *inst << "\n";
 
-        auto referencedMemoryCells = std::vector<Value *>();
-        auto &cellStates = inst2CellStates[inst];
 
+        // TODO: better naming?
+        Value *thisVar;
         if (auto *loadInst = dyn_cast<LoadInst>(inst)) {
-            Value *src = loadInst->getPointerOperand();
-            referencedMemoryCells.push_back(src);
+            thisVar = loadInst->getPointerOperand();
         } else if (auto *storeInst = dyn_cast<StoreInst>(inst)) {
-            Value *dest = storeInst->getPointerOperand();
-            referencedMemoryCells.push_back(dest);
+            thisVar = storeInst->getPointerOperand();
         } else if (auto *freeInst = dyn_cast<CallInst>(inst)) {
             if (Function *calledFunction = freeInst->getCalledFunction()) {
                 if (calledFunction->getName() == "free") {
-                    Value *src = freeInst->getArgOperand(0);
-                    referencedMemoryCells.push_back(src);
+                    thisVar = freeInst->getArgOperand(0);
+                } else {
+                    continue;
                 }
             }
+        } else {
+            continue;
+        }
+
+        auto referencedMemoryCells = std::vector<Value *>();
+        for (auto *cell : pointsToSets[thisVar]) {
+            referencedMemoryCells.push_back(cell);
         }
 
         // add all direct and transitive equivalent cells to the referenced cells via DFS
@@ -212,6 +219,35 @@ std::vector<MemorySafetyPass::MsViolation> MemorySafetyPass::checkLegality(
                 }
             }
         }
+
+        // debug print
+        errs() << "\t Cell states: \n";
+        for (auto &cellState : cellStates) {
+            auto *cell = cellState.first;
+            auto state = cellState.second;
+            auto stateStr = std::string();
+            switch (state) {
+                case CellStateAnalysis::CellState::HEAP_ALLOCATED:
+                    stateStr = "HEAP_ALLOCATED";
+                    break;
+                case CellStateAnalysis::CellState::HEAP_FREED:
+                    stateStr = "HEAP_FREED";
+                    break;
+                case CellStateAnalysis::CellState::STACK_ALLOCATED:
+                    stateStr = "STACK_ALLOCATED";
+                    break;
+                case CellStateAnalysis::CellState::TOP:
+                    stateStr = "TOP";
+                    break;
+                case CellStateAnalysis::CellState::BOTTOM:
+                    stateStr = "BOTTOM";
+                    break;
+            }
+
+
+            errs() << "\t\t" << *cell << " : " << stateStr << "\n";
+        }
+
 
         // debug print
         errs() << "\t Referenced cells: \n";
@@ -253,7 +289,7 @@ std::vector<MemorySafetyPass::MsViolation> MemorySafetyPass::checkLegality(
                         if (cellState == CellStateAnalysis::CellState::HEAP_FREED) {
                             auto violation = MsViolation(MsViolationType::DOUBLE_FREE, inst);
                             result.push_back(violation);
-                        } else if (cellState == CellStateAnalysis::CellState::HEAP_ALLOCATED) {
+                        } else if (cellState == CellStateAnalysis::CellState::STACK_ALLOCATED) {
                             auto violation = MsViolation(MsViolationType::STACK_FREE, inst);
                             result.push_back(violation);
                         }
