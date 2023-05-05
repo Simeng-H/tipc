@@ -143,16 +143,36 @@ CellStateAnalysis::CsaResult CellStateAnalysis::runCellStateAnalysis(Function &F
 
         // update based on current instruction，alloca/calloc/free changes the state of the cell
         if (auto allocaInst = dyn_cast<AllocaInst>(curr)){
+            // debug print
+            errs() << "\tFound alloca instruction: [" << *allocaInst << "]\n";
+
             updatedMapState[allocaInst] = STACK_ALLOCATED;
         }
-        else if (auto callocInst = dyn_cast<CallInst>(curr)){
-            if (callocInst->getCalledFunction()->getName() == "calloc"){
-                updatedMapState[callocInst] = HEAP_ALLOCATED;
-            }
-        }
-        else if (auto freeInst = dyn_cast<CallInst>(curr)){
-            if (freeInst->getCalledFunction()->getName() == "free"){
-                updatedMapState[freeInst] = HEAP_FREED;
+        else if (auto callInst = dyn_cast<CallInst>(curr)){
+            if (callInst->getCalledFunction()->getName() == "calloc"){
+                // debug print
+                errs() << "\tFound calloc instruction: [" << *callInst << "]\n";
+                updatedMapState[callInst] = HEAP_ALLOCATED;
+            }else if (callInst->getCalledFunction()->getName() == "free"){
+
+                // debug print
+                errs() << "\tFound free instruction: [" << *callInst << "]\n";
+
+                auto target = callInst->getArgOperand(0);
+                auto targetPointsToCells = pointsToCells[target];
+
+                for (auto &targetPointsToCell : targetPointsToCells){
+                    for (auto &equivalentCell : equivalentCells[targetPointsToCell]){
+
+                        // debug print
+                        errs() << "\t\tFound equivalent cell: [" << *equivalentCell << "]\n";
+
+                        if (updatedMapState.count(equivalentCell) > 0){
+                            updatedMapState[equivalentCell] = HEAP_FREED;
+                        }
+                    }
+                }
+
             }
         }
 

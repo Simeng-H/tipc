@@ -76,6 +76,40 @@ PointsToSolver::PointsToResult PointsToSolver::solve(){
         }
     }
 
+    // use worklist to collapse transitive equivalence
+    std::map<Value*, std::set<Value*>> collapsedEquivalence = equivalentCells;
+    std::deque<Value*> equiv_worklist;
+    for (auto &equiv : equivalentCells){
+        auto key = equiv.first;
+        equiv_worklist.push_back(key);
+    }
+    while(!equiv_worklist.empty()){
+        auto key = equiv_worklist.front();
+        equiv_worklist.pop_front();
+        auto &old_equiv = collapsedEquivalence[key];
+        auto new_equiv = old_equiv;
+
+        // add 1-layer transitive equivalence
+        for (auto &innerKey : old_equiv){
+            for (auto &innerVal : collapsedEquivalence[innerKey]){
+                new_equiv.insert(innerVal);
+            }
+        }
+
+        // check if the equivalence set has changed
+        if (new_equiv.size() != old_equiv.size()){
+            collapsedEquivalence[key] = new_equiv;
+
+            // anything key whose value contains the current key needs to be updated
+            for (auto &equiv : collapsedEquivalence){
+                auto &equivKey = equiv.first;
+                auto &equivVal = equiv.second;
+                if (equivVal.find(key) != equivVal.end()){
+                    equiv_worklist.push_back(equivKey);
+                }
+            }
+        }
+    }
 
     // debug print
     errs() << "\nPoints to solution:\n\n";

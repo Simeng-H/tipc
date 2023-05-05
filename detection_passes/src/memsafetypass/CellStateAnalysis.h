@@ -31,6 +31,8 @@ private:
 
     PointsToSolver::PointsToResult pointsToResult;
     std::set<Value *> eligibleCells;
+    std::map<Value*, std::set<Value*>> equivalentCells;
+    std::map<Value*, std::set<Value*>> pointsToCells;
 
     std::map<Instruction *, std::set<Instruction *>> getSimplifiedSuccCFG(Function &F);
     // bool isEligibleInstruction(Instruction *I)
@@ -70,8 +72,8 @@ public:
     CellStateAnalysis(PointsToSolver::PointsToResult pointsToResult) : pointsToResult(pointsToResult)
     {
         auto &variables = pointsToResult.variables;
-        auto &pointsToCells = pointsToResult.pointsToCells;
-        auto &equivalentCells = pointsToResult.equivalentCells;
+        pointsToCells = pointsToResult.pointsToCells;
+        equivalentCells = pointsToResult.equivalentCells;
 
         // filter out cells that are not heap/stack allocations
         for (auto &var : variables)
