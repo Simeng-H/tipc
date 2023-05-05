@@ -1,0 +1,8 @@
+main() {
+    var p, q;
+    p = 4;
+    q = &p;
+    free q;
+    return 0;
+}
+

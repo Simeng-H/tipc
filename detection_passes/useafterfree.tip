@@ -1,0 +1,8 @@
+main() {
+    var p, q;
+    p = alloc 4;
+    free p;
+    q = *p;
+    return 0;
+}
+
