@@ -20,6 +20,11 @@ bool MemorySafetyPass::runOnFunction(Function &F) {
     // Run points to analysis
     PointsToResult pointsToResult = runPointsToAnalysis(F);
 
+    // Run Cell State Analysis
+    CellStateAnalysis cellStateAnalysis = CellStateAnalysis(pointsToResult);
+    cellStateAnalysis.runCellStateAnalysis(F);
+
+
     return false; 
 }
 
@@ -312,4 +317,202 @@ void PointsToSolver::propogate(){
             addToken(t, y);
         }
     }
+}
+
+// class CellStateAnalysis {
+// private:
+//     enum CellState {
+//         TOP,
+//         BOTTOM,
+//         HEAP_ALLOCATED,
+//         STACK_ALLOCATED,
+//         HEAP_FREED,
+//     };
+
+//     typedef std::map<Value *, CellState> MapState;
+//     typedef std::map<Instruction *, MapState> Result;
+
+// public:
+//     Result runCellStateAnalysis(Function &F);
+//     static void printResults(Result &result);
+
+
+
+
+
+// };
+
+CellStateAnalysis::Result CellStateAnalysis::runCellStateAnalysis(Function &F){
+
+    // debug print
+    errs() << "\nRunning cell state analysis...\n";
+
+    // auto &variables = pointsToResult.variables;
+    // auto &pointsToCells = pointsToResult.pointsToCells;
+    // auto &equivalentCells = pointsToResult.equivalentCells;
+
+
+    // construct simplified CFG that only contains relevant instructions
+    std::map<Instruction *, std::set<Instruction *>> simplifiedCFG = getSimplifiedSuccCFG(F);
+
+    // debug print: simplified CFG
+    errs() << "\nSimplified CFG:\n";
+    for (auto &B : F){
+        for (auto &I : B){
+            errs() << "\t[" << I << "]:\n";
+            for (auto &succ : simplifiedCFG[&I]){
+                errs() << "\t\t[" << *succ << "]\n";
+            }
+        }
+    }
+
+    // collect all instructions
+    std::set<Instruction *> allInstructions;
+    for (auto &B : F){
+        for (auto &I : B){
+            allInstructions.insert(&I);
+        }
+    }
+
+    // initialize the worklist to contain all instructions
+    std::deque<Instruction *> worklist(allInstructions.begin(), allInstructions.end());
+
+    // initialize the result
+    auto state = Result();
+
+    // for each instruction, initialize the state to default MapState
+
+    // default MapState: all eligible cells are BOTTOM
+    auto defaultMapState = MapState();
+    for (auto &cell : eligibleCells){
+        defaultMapState[cell] = BOTTOM;
+    }
+
+
+    for (auto &I : allInstructions){
+        state[I] = defaultMapState;
+    }
+
+
+    // run until the worklist is empty
+    while(!worklist.empty()){
+        auto &curr = worklist.front();
+        worklist.pop_front();
+
+        // lookup the instruction in the result
+        auto &old = state[curr];
+
+        // get predecessor instructions
+        auto predInsts = std::vector<Instruction *>();
+        for (auto &I : allInstructions){
+            if (simplifiedCFG[I].find(curr) != simplifiedCFG[I].end()){
+                predInsts.push_back(I);
+            }
+        }
+
+        // get predecessor states
+        auto predStates = std::vector<MapState>();
+        for (auto &pred : predInsts){
+            predStates.push_back(state[pred]);
+        }
+
+        // merge the predecessor states
+        auto iterPredStates = predStates.begin();
+        auto endPredStates = predStates.end();
+        auto mergedPredState = *iterPredStates;
+        ++iterPredStates;
+        for (;iterPredStates != endPredStates; ++iterPredStates){
+            mergedPredState = mergeMapStates(mergedPredState, *iterPredStates);
+        }
+
+        // TODO: update based on current instruction
+
+        
+
+
+        
+
+        
+    }
+
+    return Result();
+
+
+}
+
+std::map<Instruction *, std::set<Instruction *>> CellStateAnalysis::getSimplifiedSuccCFG(Function &F) {
+    std::set<Instruction *> allInstructions;
+
+    // get all instructions
+    for (auto &B : F) {
+        for (auto &I : B) {
+            allInstructions.insert(&I);
+        }
+    }
+
+    // initialize the result
+    std::map<Instruction *, std::set<Instruction *>> simplifiedCFG;
+
+    // for each instruction that's not a block terminator, its successors are the instructions that follow it in the same basic block
+    // for each instruction that's a block terminator, its successors are the starts of all the blocks it can branch to
+    for (auto &B : F) {
+        for (auto I = B.begin(), E = B.end(); I != E; ++I) {
+            if (!I->isTerminator()) {
+                // Get the next instruction in the same basic block using iterators
+                auto nextInstr = std::next(I);
+                if (nextInstr != E) {
+                    simplifiedCFG[&*I].insert(&*nextInstr);
+                }
+            } else {
+                // Get the successor blocks and insert the first instruction of each block
+                for (unsigned i = 0; i < I->getNumSuccessors(); ++i) {
+                    BasicBlock *succBlock = I->getSuccessor(i);
+                    if (!succBlock->empty()) {
+                        simplifiedCFG[&*I].insert(&succBlock->front());
+                    }
+                }
+            }
+        }
+    }
+
+    return simplifiedCFG;
+}
+
+CellStateAnalysis::MapState CellStateAnalysis::mergeMapStates(CellStateAnalysis::MapState &state1, CellStateAnalysis::MapState &state2){
+    auto result = MapState();
+
+    // key-wise CellState merge
+    for (auto &cell : eligibleCells){
+        auto &state1Cell = state1[cell];
+        auto &state2Cell = state2[cell];
+        result[cell] = lub(state1Cell, state2Cell);
+    }
+
+
+    return result;
+
+}
+
+CellStateAnalysis::CellState CellStateAnalysis::lub(CellStateAnalysis::CellState &state1, CellStateAnalysis::CellState &state2){
+    if (state1 == state2){
+        return state1;
+    }
+    if (state1 == TOP || state2 == TOP){
+        return TOP;
+    }
+    if (state1 == BOTTOM){
+        return state2;
+    }
+    if (state2 == BOTTOM){
+        return state1;
+    }
+
+    if (state1 == STACK_ALLOCATED || state2 == STACK_ALLOCATED){
+        return TOP;
+    }
+
+    // both are not equal and not TOP and not BOTTOM and not STACK_ALLOCATED: must be HEAP_ALLOCATED and HEAP_FREED
+    // if it can be FREED, we consider it FREED so we never double free/use after free
+    return HEAP_FREED;
+
 }
